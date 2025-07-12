@@ -7,6 +7,20 @@ import 'package:weather_app/hourly_forecast.dart';
 import 'package:weather_app/secrets.dart';
 import 'package:http/http.dart' as http;
 
+
+enum TemperatureUnit { kelvin, celsius, fahrenheit }
+
+String formatTemperature(double kelvinTemp, TemperatureUnit unit) {
+  switch (unit) {
+    case TemperatureUnit.celsius:
+      return '${(kelvinTemp - 273.15).toStringAsFixed(1)} °C';
+    case TemperatureUnit.fahrenheit:
+      return '${((kelvinTemp - 273.15) * 9 / 5 + 32).toStringAsFixed(1)} °F';
+    case TemperatureUnit.kelvin:
+    return '${kelvinTemp.toStringAsFixed(1)} K';
+  }
+}
+
 class WeatherScreen extends StatefulWidget {
   const WeatherScreen({super.key});
 
@@ -18,6 +32,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
   late Future<Map<String, dynamic>> weather;
   String cityName = 'Lahore';
   final TextEditingController _searchController = TextEditingController();
+  TemperatureUnit selectedUnit = TemperatureUnit.celsius;
 
   Future<Map<String, dynamic>> getCurrentWeather(String city) async {
     try {
@@ -44,6 +59,16 @@ class _WeatherScreenState extends State<WeatherScreen> {
     weather = getCurrentWeather(cityName);
   }
 
+void _searchCity(String city) {
+  if (city.trim().isEmpty) return;
+  setState(() {
+    cityName = city.trim().toUpperCase();
+    weather = getCurrentWeather(cityName);
+    _searchController.clear();
+  });
+}
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -52,6 +77,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
           'Weather App',
           style: TextStyle(
             fontWeight: FontWeight.bold,
+            fontSize: 22,
           ),
         ),
         centerTitle: true,
@@ -79,10 +105,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 suffixIcon: IconButton(
                   icon: const Icon(Icons.send),
                   onPressed: () {
-                    setState(() {
-                      cityName = _searchController.text.trim();
-                      weather = getCurrentWeather(cityName);
-                    });
+                    _searchCity(_searchController.text);
                   },
                 ),
                 border: OutlineInputBorder(
@@ -90,10 +113,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                 ),
               ),
               onSubmitted: (value) {
-                setState(() {
-                  cityName = value.trim();
-                  weather = getCurrentWeather(cityName);
-                });
+                _searchCity(value);
               },
             ),
           ),
@@ -113,7 +133,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
           final data = snapshot.data!;
           final currentWeatherData = data['list'][0];
-          final currentTemp = currentWeatherData['main']['temp'];
+          final currentTemp = (currentWeatherData['main']['temp'] as num).toDouble();
           final currentSky = currentWeatherData['weather'][0]['main'];
           final pressure = currentWeatherData['main']['pressure'];
           final wind = currentWeatherData['wind']['speed'];
@@ -126,7 +146,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // main card
+                  // Main card
                   SizedBox(
                     width: double.infinity,
                     child: Card(
@@ -143,11 +163,53 @@ class _WeatherScreenState extends State<WeatherScreen> {
                             child: Column(
                               children: [
                                 Text(
-                                  '$currentTemp K',
+                                  cityName,
                                   style: const TextStyle(
-                                    fontSize: 32,
+                                    fontSize: 24,
                                     fontWeight: FontWeight.bold,
                                   ),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      formatTemperature(currentTemp, selectedUnit),
+                                      style: const TextStyle(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    DropdownButton<TemperatureUnit>(
+                                      value: selectedUnit,
+                                      dropdownColor: Colors.grey[800],
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                      ),
+                                      underline: Container(),
+                                      items: TemperatureUnit.values.map((unit) {
+                                        return DropdownMenuItem(
+                                          value: unit,
+                                          child: Text(
+                                            unit == TemperatureUnit.kelvin
+                                                ? 'K'
+                                                : unit == TemperatureUnit.celsius
+                                                    ? '°C'
+                                                    : '°F',
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (newUnit) {
+                                        if (newUnit != null) {
+                                          setState(() {
+                                            selectedUnit = newUnit;
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ],
                                 ),
                                 const SizedBox(height: 16),
                                 Icon(
@@ -187,13 +249,15 @@ class _WeatherScreenState extends State<WeatherScreen> {
                       itemBuilder: (context, index) {
                         final hourlyForecast = data['list'][index + 1];
                         final time = DateTime.parse(hourlyForecast['dt_txt']);
+                        final hourlyTemp = (hourlyForecast['main']['temp'] as num).toDouble();
+
                         return HourlyForecastCard(
                           time: DateFormat.j().format(time),
                           icon: hourlyForecast['weather'][0]['main'] == 'Rain' ||
-                              hourlyForecast['weather'][0]['main'] == 'Clouds'
+                                  hourlyForecast['weather'][0]['main'] == 'Clouds'
                               ? Icons.cloud
                               : Icons.sunny,
-                          temprature: hourlyForecast['main']['temp'].toString(),
+                          temprature: formatTemperature(hourlyTemp, selectedUnit),
                         );
                       },
                     ),
